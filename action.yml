@@ -1,0 +1,98 @@
+name: 'Create PR'
+description: 'Create Pull Request'
+
+inputs:
+  token:
+    description: 'PAT'
+    required: true
+  repository:
+    description: 'Repository, ex: {owner}/{repo}'
+    required: true
+  branch:
+    description: 'Branch'
+    required: true
+  cmd:
+    description: 'Command'
+  pr-branch:
+    description: 'PR Branch'
+    default: 'feature/pr'
+  pr-title:
+    description: 'PR Title'
+    default: 'Create PR'
+  pr-message:
+    description: 'PR Message'
+
+outputs:
+  pr-branch:
+    description: 'PR Branch'
+    value: ${{ steps.cpr.outputs.pr-number }}
+  pr-number:
+    description: 'PR Number'
+    value: ${{ steps.cpr.outputs.pr-number }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.branch }}
+        token: ${{ inputs.token }}
+        fetch-depth: 0
+    - name: Create PR Branch
+      id: cpb
+      shell: bash
+      run: |
+        PR_BRANCH_PREFIX=${{inputs.pr-branch}}
+
+        if [ -z "${PR_BRANCH_PREFIX}" ]; then
+          PR_BRANCH_PREFIX="feature/pr"
+        fi
+
+        PR_BRANCH_SUFFIX=`echo $(date +%s%N)`
+
+        PR_BRANCH="${PR_BRANCH_PREFIX}-${PR_BRANCH_SUFFIX}"
+
+        git config user.name "${GITHUB_ACTOR}"
+        git config user.email "${GITHUB_ACTOR}@github.com"
+        git checkout -b ${PR_BRANCH}
+
+        ${{ inputs.cmd }}
+
+
+        HAS_CHANGE=`git status -s`
+
+        if [ -z "${HAS_CHANGE}" ]; then
+          echo "No change"
+          exit 1
+        fi
+
+        git add .
+        git commit -m "${{ inputs.pr-title }}"
+        git push -f -u origin ${PR_BRANCH}
+
+        echo "pr-branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+    - name: Create Pull Request
+      id: cpr
+      shell: bash
+      run: |
+        PR_TITLE="${{ inputs.pr-title }}"
+
+        if [ -z "${PR_TITLE}" ]; then
+          PR_TITLE="Create PR ${{ steps.cpb.outputs.pr-branch }}"
+        fi
+
+        BODY="{\"title\":\"${PR_TITLE}\",\"body\":\"${{ inputs.content }}\",\"head\":\"${{ steps.cpb.outputs.pr-branch }}\",\"base\":\"${{ inputs.branch }}\"}"
+
+        RESULT=`curl -s -X POST "${GITHUB_API_URL}/repos/${{ inputs.repository }}/pulls" -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ inputs.token }}" -d "${BODY}"`
+
+        d=`echo "$RESULT" | jq -r '. | "number=" + (.number?|tostring) + "\n" + "message=\"" + .message? + "\"\n" + "code=\"" + .errors?[0].code? + "\"\n" + "field=\"" + .errors?[0].field? + "\""'`
+
+        eval $d
+
+        if [ -z "$message" ]; then
+          echo "pr-number=$number" >> $GITHUB_OUTPUT
+        else
+          echo "Failed to create PR, error: $message, code: $code, field: $field"
+          exit 1
+        fi
