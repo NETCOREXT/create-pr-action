@@ -77,12 +77,14 @@ runs:
       shell: bash
       run: |
         PR_TITLE="${{ inputs.pr-title }}"
-
         if [ -z "${PR_TITLE}" ]; then
           PR_TITLE="Create PR ${{ steps.cpb.outputs.pr-branch }}"
         fi
 
-        BODY="{\"title\":\"${PR_TITLE}\",\"body\":\"${{ inputs.pr-message }}\",\"head\":\"${{ steps.cpb.outputs.pr-branch }}\",\"base\":\"${{ inputs.branch }}\"}"
+        # Escape pr-message for JSON
+        PR_MESSAGE=$(echo '${{ inputs.pr-message }}' | jq -Rs .)
+
+        BODY="{\"title\":\"${PR_TITLE}\",\"body\":${PR_MESSAGE},\"head\":\"${{ steps.cpb.outputs.pr-branch }}\",\"base\":\"${{ inputs.branch }}\"}"
 
         RESULT=`curl -s -X POST "${GITHUB_API_URL}/repos/${{ inputs.repository }}/pulls" -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ inputs.token }}" -d "${BODY}"`
 
