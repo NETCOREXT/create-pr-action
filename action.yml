@@ -68,7 +68,7 @@ runs:
         fi
 
         git add .
-        git commit -m "${{ inputs.pr-title }}\n\n${{ inputs.pr-message }}"
+        git commit -m $'${{ inputs.pr-title }}\n\n${{ inputs.pr-message }}'
         git push -f -u origin ${PR_BRANCH}
 
         echo "pr-branch=$PR_BRANCH" >> $GITHUB_OUTPUT
